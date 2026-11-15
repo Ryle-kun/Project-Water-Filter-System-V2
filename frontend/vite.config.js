@@ -1,20 +1,36 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
+import { VitePWA } from 'vite-plugin-pwa'
 
 export default defineConfig({
-  plugins: [react()],
-  server: {
-    host: '0.0.0.0',   // Accessible on local network (Pi IP)
-    port: 5173,
-    proxy: {
-      '/api': 'http://localhost:8000',
-      '/ws':  { target: 'ws://localhost:8000', ws: true },
-    }
-  },
-  build: {
-    outDir: '../backend/static',  // Build outputs into backend/static for single-server deploy
-  },
-  define: {
-    'import.meta.env.VITE_API_URL': JSON.stringify(process.env.VITE_API_URL || '')
-  }
+  plugins: [
+    react(),
+    VitePWA({
+      registerType: 'autoUpdate',
+
+      manifest: {
+        name: 'Water Monitoring',
+        short_name: 'Water Monitor',
+        description: 'IoT-Based Multi-Tank Water Monitoring and Distribution Control System',
+        theme_color: '#040b15',
+        background_color: '#040b15',
+        display: 'standalone',
+        start_url: '/',
+        scope: '/',
+
+        icons: [
+          {
+            src: '/pwa-192x192.png',
+            sizes: '192x192',
+            type: 'image/png',
+          },
+          {
+            src: '/pwa-512x512.png',
+            sizes: '512x512',
+            type: 'image/png',
+          },
+        ],
+      },
+    }),
+  ],
 })
