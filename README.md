@@ -1,211 +1,231 @@
-# 💧 Barangay Water System — IoT Monitoring & Control App
+# 💧 Water Filter System V2
+### IoT-Based Water Monitoring and Distribution Control System
 
-Full-stack IoT application for monitoring and controlling a 3-tank gravity-fed water
-filtration system. Runs **offline on a Raspberry Pi** at the water station and optionally
-syncs to a **cloud VPS** for remote access by barangay officials.
+A full-stack IoT water monitoring and distribution control project designed for barangay water distribution. It monitors three water tanks, tracks flow rates and valve states, and provides a web dashboard for system monitoring and control.
 
----
-
-## Tech Stack
-
-| Layer | Technology | Why |
-|-------|-----------|-----|
-| Backend API | **Python + FastAPI** | Async, fast, runs on Pi, built-in WebSocket |
-| Database | **SQLite → PostgreSQL** | SQLite locally (zero setup), Postgres on cloud |
-| ORM | **SQLAlchemy async** | Swap DB with one config line |
-| Frontend | **React + Vite** | Real-time WebSocket dashboard |
-| Arduino Bridge | **pyserial-asyncio** | Reads sensor JSON from Arduino over USB |
-| Auth | **JWT (PyJWT)** | Role-based: admin / operator / official |
-| Deployment | **Docker Compose** | Same stack local and cloud |
+> **Development status:** The web application and backend can be run locally. Physical Arduino/LoRa integration, deployment on the Raspberry Pi, and complete offline operation must be tested with the actual hardware and deployment environment. Do not treat simulated or placeholder readings as live sensor data.
 
 ---
 
-## Architecture
+## 1. System Overview
 
-```
-[Arduino Mega] ──USB Serial──► [Raspberry Pi]
-                                    │
-                               [FastAPI Backend]
-                               ├─ SQLite DB (local)
-                               ├─ WebSocket server
-                               └─ REST API
-                                    │
-                    ┌───────────────┴────────────────┐
-                    │                                │
-             [Local Browser]               [Cloud VPS / Internet]
-             (operator LCD panel          (barangay officials
-              on Pi's local network)       remote dashboard)
-```
+The water system is designed around three gravity-fed tanks:
 
----
+| Tank | Capacity | Purpose |
+|---|---:|---|
+| Tank 1 | 2,000 L | Incoming water storage |
+| Tank 2 | 2,000 L | Filtration stage |
+| Tank 3 | 4,000 L | Filtered-water storage and distribution |
 
-## Quick Start — Local (Raspberry Pi)
+The design serves five tap stands. The intended hardware arrangement uses an Arduino Mega 2560 as the main controller, an Arduino Nano for the remote tap-stand controller, and LoRa SX1278 modules for wireless communication between controller locations. A Raspberry Pi is intended to host the local backend and dashboard.
 
-### 1. Clone and configure
-```bash
-git clone <your-repo> water-system
-cd water-system/backend
-cp .env.example .env
-# Edit .env — change SECRET_KEY at minimum
-```
+The system is designed for locations where internet access may be limited. Local operation still depends on the server, network connection between the dashboard and server, and functioning hardware.
 
-### 2. Install backend
-```bash
-cd backend
-python -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
-```
+## 2. Technology Stack
 
-### 3. Install frontend
-```bash
-cd ../frontend
-npm install
-npm run build          # Builds into backend/static/
-```
+| Layer | Technology |
+|---|---|
+| Frontend | React 19, Vite 8 |
+| Charts | Chart.js, react-chartjs-2 |
+| Progressive Web App | vite-plugin-pwa |
+| Backend API | Python, FastAPI |
+| Database | MySQL |
+| ORM | SQLAlchemy 2 (async) |
+| Authentication | JWT |
+| Real-time updates | WebSocket |
+| Controller communication | Serial, pyserial-asyncio |
+| Microcontrollers | Arduino Mega 2560, Arduino Nano |
+| Wireless link | LoRa SX1278 |
 
-### 4. Run
-```bash
-cd ../backend
-uvicorn main:app --host 0.0.0.0 --port 8000
-```
+## 3. Features
 
-Dashboard: `http://<pi-ip>:8000`
-Default login: `admin` / `admin123` ← **change this!**
+- Dashboard for three tank levels and water-flow information.
+- Valve-state monitoring and valve command endpoints.
+- Tap-stand schedule management endpoints.
+- User authentication with role information.
+- Sensor-reading history and alert endpoints.
+- WebSocket support for real-time dashboard updates.
+- Installable PWA with a web app manifest and service worker.
 
-### 5. Arduino
-- Upload `arduino/water_system.ino` using Arduino IDE
-- Connect Arduino to Pi via USB
-- Set `SERIAL_PORT=/dev/ttyUSB0` (or `/dev/ttyACM0`) in `.env`
+**PWA limitation:** Installation and service-worker registration have been checked using the production preview. Full offline functionality has not been verified. API requests, login, and live hardware data require the backend and its dependencies to be reachable.
 
----
+## 4. Repository Structure
 
-## Docker Deploy
-
-### Local Pi (development mode with frontend dev server)
-```bash
-docker compose --profile dev up
-```
-
-### Cloud VPS (production with Nginx)
-```bash
-# 1. Build frontend first
-cd frontend && npm run build
-
-# 2. Start production stack
-docker compose --profile prod up -d
-```
-
----
-
-## Cloud Deployment (Render / Railway / VPS)
-
-### Option A — Render.com (free tier)
-1. Push to GitHub
-2. New Web Service → connect repo → Runtime: Docker
-3. Set environment variables:
-   - `DATABASE_URL` → your PostgreSQL URL
-   - `SECRET_KEY` → random 32-char string
-   - `ENVIRONMENT=production`
-
-### Option B — VPS (DigitalOcean / Hetzner)
-```bash
-# On server
-git clone <repo> && cd water-system
-cp backend/.env.example backend/.env
-# Edit .env with production values
-docker compose --profile prod up -d
-```
-
----
-
-## Environment Variables
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `DATABASE_URL` | SQLite local | Swap to PostgreSQL for cloud |
-| `SECRET_KEY` | weak default | **Must change in production** |
-| `SERIAL_PORT` | `/dev/ttyUSB0` | Arduino USB port on Pi |
-| `BAUD_RATE` | `9600` | Must match Arduino sketch |
-| `SMTP_*` | — | Email alerts (optional) |
-
----
-
-## API Endpoints
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/api/auth/login` | Get JWT token |
-| GET | `/api/dashboard` | Full dashboard data |
-| POST | `/api/sensors/reading` | Arduino posts data here |
-| GET | `/api/sensors/history` | Historical readings |
-| POST | `/api/valves/command` | Manual valve override |
-| GET/POST | `/api/schedules` | View/edit tap schedules |
-| GET | `/api/alerts` | View alerts |
-| POST | `/api/alerts/{id}/acknowledge` | Acknowledge alert |
-| WS | `/ws/{client_id}` | Real-time WebSocket |
-| GET | `/api/health` | System health check |
-
-Interactive API docs: `http://localhost:8000/docs`
-
----
-
-## Default Credentials
-
-| Role | Username | Password | Access |
-|------|----------|----------|--------|
-| Admin | `admin` | `admin123` | Full access + user management |
-| Operator | `operator` | `operator123` | Control + schedules |
-| Official | `official` | `official123` | View only |
-
-⚠️ **Change all passwords after first login!**
-
----
-
-## Scalability Notes
-
-- **More tanks**: Add columns to `SensorReading` model + migration
-- **More tap stands**: Increase valve count in models + Arduino sketch
-- **Multiple barangays**: Add `barangay_id` FK to all tables + multi-tenant auth
-- **LoRa nodes**: Replace serial bridge with LoRa gateway module
-- **Cloud sync**: Add background task to periodically POST Pi readings to cloud API
-
----
-
-## Arduino Libraries Required
-
-Install via Arduino IDE Library Manager:
-- `ArduinoJson` by Benoit Blanchon
-- `RTClib` by Adafruit
-- `LiquidCrystal_I2C` by Frank de Brabander
-- `Keypad` by Mark Stanley
-
----
-
-## Project Structure
-
-```
-water-system/
+```text
+Project-Water-Filter-System-V2/
+├── arduino/
+│   └── water_systems.ino
 ├── backend/
-│   ├── main.py              # FastAPI app entry point
-│   ├── models.py            # SQLAlchemy DB models
-│   ├── database.py          # DB init + session
-│   ├── schemas.py           # Pydantic request/response schemas
-│   ├── websocket_manager.py # WebSocket connection manager
-│   ├── serial_bridge.py     # Arduino ↔ API bridge
-│   ├── services/            # Business logic services
-│   ├── requirements.txt
-│   ├── Dockerfile
-│   └── .env.example
+│   ├── main.py
+│   ├── database.py
+│   ├── models.py
+│   ├── schemas.py
+│   ├── serial_bridge.py
+│   ├── websocket_manager.py
+│   ├── services/
+│   └── requirements.txt
 ├── frontend/
+│   ├── public/
 │   ├── src/
-│   │   ├── App.jsx          # Main React app (login + dashboard)
-│   │   └── main.jsx
-│   ├── index.html
 │   ├── package.json
 │   └── vite.config.js
-├── arduino/
-│   └── water_system.ino    # Arduino Mega firmware
 ├── docker-compose.yml
+├── .gitignore
 └── README.md
 ```
+
+## 5. Requirements
+
+Install the following before setup:
+
+- Git
+- Python 3.10 or newer
+- Node.js and npm
+- MySQL (XAMPP can be used for local development)
+- Visual Studio Code (recommended)
+
+## 6. Setup Instructions
+
+### Step 1 — Clone the repository
+
+```bash
+git clone https://github.com/Ryle-kun/Project-Water-Filter-System-V2.git
+cd Project-Water-Filter-System-V2
+git checkout dev
+```
+
+The `dev` branch contains the current development version. Use `main` only when you specifically need the stable branch.
+
+### Step 2 — Create the MySQL database
+
+1. Start MySQL in XAMPP (or start your MySQL server).
+2. Open phpMyAdmin or another MySQL client.
+3. Create a database named:
+
+```sql
+CREATE DATABASE water_system_db;
+```
+
+The current backend model configuration defaults to:
+
+```text
+mysql+aiomysql://root:@localhost:3306/water_system_db
+```
+
+If your MySQL username or password differs, set the appropriate connection string in the backend `.env` file.
+
+### Step 3 — Configure and run the backend
+
+Open a terminal at the repository root:
+
+```powershell
+cd backend
+python -m venv venv
+.\venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+pip install aiomysql
+```
+
+**Important:** The current `requirements.txt` does not yet list `aiomysql`, although the configured MySQL connection uses it. Install it separately using the command above.
+
+Create a file named `.env` inside the `backend` folder:
+
+```env
+DATABASE_URL=mysql+aiomysql://root:@localhost:3306/water_system_db
+SECRET_KEY=replace_with_a_long_random_secret
+DEVICE_API_KEY=replace_with_a_different_random_device_key
+SERIAL_PORT=COM3
+BAUD_RATE=9600
+```
+
+Generate unique, strong values for `SECRET_KEY` and `DEVICE_API_KEY`. Change `SERIAL_PORT` to the correct port for the connected Arduino. Do not commit or share the `.env` file or its secrets.
+
+Start the API:
+
+```powershell
+uvicorn main:app --reload
+```
+
+Local API address: http://127.0.0.1:8000
+
+Interactive API documentation: http://127.0.0.1:8000/docs
+
+### Step 4 — Configure and run the frontend
+
+Open a **second terminal** at the repository root:
+
+```powershell
+cd frontend
+npm install
+npm run dev
+```
+
+Open the local URL printed by Vite (normally http://localhost:5173).
+
+The current frontend API configuration is in `frontend/src/constants.js` and points to `http://127.0.0.1:8000`. For another computer or a deployed server, update the API and WebSocket addresses to match that environment.
+
+### Step 5 — Build and preview the PWA
+
+From the `frontend` directory:
+
+```powershell
+npm run build
+npm run preview
+```
+
+Vite writes the production build to `frontend/dist/`. The PWA plugin generates the web manifest and service worker as part of the production build.
+
+## 7. Initial User Accounts
+
+The current backend database seeding code creates these accounts when they do not already exist:
+
+| Role | Username | Initial password |
+|---|---|---|
+| Administrator | `admin` | `password123` |
+| Operator | `operator` | `password123` |
+| Official | `official` | `password123` |
+
+These are development credentials. Change them before any real deployment and do not use these defaults in a production environment. Existing database users are not automatically reset when the application starts.
+
+## 8. Hardware and Serial Communication
+
+The backend serial bridge is configured through:
+
+| Variable | Purpose |
+|---|---|
+| `SERIAL_PORT` | Arduino serial port (for example, `COM3` on Windows or `/dev/ttyUSB0` on Linux) |
+| `BAUD_RATE` | Serial communication speed; default is `9600` |
+| `DEVICE_API_KEY` | Shared key used to authenticate device readings |
+
+The bridge expects newline-delimited JSON data from the controller and forwards sensor readings to the backend API using the `X-Device-Key` header. Valve commands are queued for serial transmission.
+
+The backend can start without an Arduino attached, but hardware monitoring and control will not work until the correct controller, serial port, firmware, and wiring are connected and tested.
+
+## 9. Current Development Notes
+
+- The backend's sensor simulation task is disabled in the current startup configuration.
+- The automatic schedule-checker task is also disabled in the current startup configuration.
+- Do not assume dashboard values are live hardware readings unless the Arduino data path has been connected and verified.
+- The frontend currently uses a local API address; update it when accessing the backend from another device.
+- The PWA can be installed, but complete offline operation has not been validated.
+- The current backend requirements file should be updated to include `aiomysql` so a separate installation step is no longer necessary.
+
+## 10. Git Branch Workflow
+
+| Branch | Purpose |
+|---|---|
+| `main` | Stable version |
+| `dev` | Integration and development |
+| `feature/*` | Individual features and fixes |
+
+Contributors should create a feature branch from `dev`, commit their changes there, and submit them for review before merging into `dev`. Avoid pushing unreviewed work directly to `main`.
+
+---
+
+## Repository
+
+GitHub: https://github.com/Ryle-kun/Project-Water-Filter-System-V2
+
+**Project:** Water Filter System V2  
+**Project type:** IoT Monitoring and Water Distribution Control  
+**Purpose:** Thesis / Capstone Project
